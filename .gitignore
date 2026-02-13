@@ -1,0 +1,24 @@
+# Database
+gakin.db
+gakin.db-wal
+gakin.db-shm
+
+# Credentials
+admin_password.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual environment
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
