@@ -43,7 +43,18 @@ def render(target_month, year, month):
                 pw_icon = "🔑" if has_pw else "⚠️"
                 c1, c2, c3, c4, c5 = st.columns([3, 1, 1, 1, 1])
                 with c1:
-                    st.write(f"{'[有効]' if d['is_active'] else '[無効]'} {d['name']} {pw_icon}")
+                    if d['is_active']:
+                        st.markdown(
+                            f'<span style="background-color:#d4edda;padding:2px 8px;border-radius:4px">'
+                            f'有効</span> {d["name"]} {pw_icon}',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.markdown(
+                            f'<span style="background-color:#f8d7da;padding:2px 8px;border-radius:4px">'
+                            f'無効</span> {d["name"]} {pw_icon}',
+                            unsafe_allow_html=True,
+                        )
                 with c2:
                     if d['is_active']:
                         if st.button("無効化", key=f"deact_{d['id']}", type="secondary"):
@@ -136,10 +147,20 @@ def render(target_month, year, month):
             for c in clinics_all:
                 cc1, cc2, cc3 = st.columns([4, 1, 1])
                 with cc1:
-                    st.write(
-                        f"{'[有効]' if c['is_active'] else '[無効]'} **{c['name']}** "
-                        f"| ¥{c['fee']:,} | {FREQ_LABELS.get(c['frequency'], c['frequency'])}"
-                    )
+                    if c['is_active']:
+                        st.markdown(
+                            f'<span style="background-color:#d4edda;padding:2px 8px;border-radius:4px">'
+                            f'有効</span> **{c["name"]}** '
+                            f'| ¥{c["fee"]:,} | {FREQ_LABELS.get(c["frequency"], c["frequency"])}',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.markdown(
+                            f'<span style="background-color:#f8d7da;padding:2px 8px;border-radius:4px">'
+                            f'無効</span> **{c["name"]}** '
+                            f'| ¥{c["fee"]:,} | {FREQ_LABELS.get(c["frequency"], c["frequency"])}',
+                            unsafe_allow_html=True,
+                        )
                 with cc2:
                     if c['is_active']:
                         if st.button("無効化", key=f"deact_cli_{c['id']}", type="secondary"):
