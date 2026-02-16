@@ -1,10 +1,15 @@
 # Database
-gakin.db
-gakin.db-wal
-gakin.db-shm
+gaikin.db
+gaikin.db-wal
+gaikin.db-shm
 
 # Credentials
 admin_password.txt
+*.json
+credentials/
+
+# Backup
+database_sqlite.py
 
 # Python
 __pycache__/
