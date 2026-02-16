@@ -72,21 +72,26 @@ SHEET_HEADERS = {
 
 def init_db():
     """全シートを初期化（ヘッダーがなければ作成、不足カラムがあれば追加）"""
+    if st.session_state.get("_db_initialized"):
+        return
     sh = _get_spreadsheet()
+    existing = {ws.title: ws for ws in sh.worksheets()}
     for sheet_name, headers in SHEET_HEADERS.items():
-        try:
-            ws = sh.worksheet(sheet_name)
-        except gspread.WorksheetNotFound:
+        if sheet_name not in existing:
             ws = sh.add_worksheet(title=sheet_name, rows=100, cols=len(headers))
-        existing_headers = ws.row_values(1)
-        if not existing_headers:
             ws.update([headers], "A1")
         else:
-            # 不足カラムを末尾に追加（既存データとの互換性）
-            missing = [h for h in headers if h not in existing_headers]
-            if missing:
-                new_headers = existing_headers + missing
-                ws.update([new_headers], "A1")
+            ws = existing[sheet_name]
+            existing_headers = ws.row_values(1)
+            if not existing_headers:
+                ws.update([headers], "A1")
+            else:
+                # 不足カラムを末尾に追加（既存データとの互換性）
+                missing = [h for h in headers if h not in existing_headers]
+                if missing:
+                    new_headers = existing_headers + missing
+                    ws.update([new_headers], "A1")
+    st.session_state["_db_initialized"] = True
 
 
 def _init_monthly_sheet(name, headers):
