@@ -23,6 +23,17 @@ FREQ_LABELS = {k: v for k, v in FREQ_OPTIONS}
 def render(target_month, year, month):
     st.header("マスタ管理")
 
+    # 行レベルの背景色CSS
+    st.markdown("""<style>
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.row-active) {
+        background-color: #e8f5e9 !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.row-inactive) {
+        background-color: #ffebee !important;
+    }
+    .row-active, .row-inactive { display: none; }
+    </style>""", unsafe_allow_html=True)
+
     col1, col2 = st.columns(2)
 
     # ---- 医員管理 ----
@@ -41,39 +52,32 @@ def render(target_month, year, month):
             for d in doctors_all:
                 has_pw = bool(d.get("password_hash"))
                 pw_icon = "🔑" if has_pw else "⚠️"
-                c1, c2, c3, c4, c5 = st.columns([3, 1, 1, 1, 1])
-                with c1:
-                    if d['is_active']:
-                        st.markdown(
-                            f'<span style="background-color:#d4edda;padding:2px 8px;border-radius:4px">'
-                            f'有効</span> {d["name"]} {pw_icon}',
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.markdown(
-                            f'<span style="background-color:#f8d7da;padding:2px 8px;border-radius:4px">'
-                            f'無効</span> {d["name"]} {pw_icon}',
-                            unsafe_allow_html=True,
-                        )
-                with c2:
-                    if d['is_active']:
-                        if st.button("無効化", key=f"deact_{d['id']}", type="secondary"):
-                            update_doctor(d['id'], is_active=0)
-                            st.rerun()
-                    else:
-                        if st.button("有効化", key=f"act_{d['id']}"):
-                            update_doctor(d['id'], is_active=1)
-                            st.rerun()
-                with c3:
-                    if st.button("名前変更", key=f"rename_{d['id']}"):
-                        st.session_state[f"editing_doc_{d['id']}"] = True
-                with c4:
-                    btn_label = "PW再設定" if has_pw else "初期PW設定"
-                    if st.button(btn_label, key=f"setpw_{d['id']}"):
-                        st.session_state[f"setting_pw_{d['id']}"] = True
-                with c5:
-                    if st.button("削除", key=f"del_doc_{d['id']}", type="secondary"):
-                        st.session_state[f"confirm_del_doc_{d['id']}"] = True
+                marker = "row-active" if d['is_active'] else "row-inactive"
+                status_label = "有効" if d['is_active'] else "無効"
+                with st.container(border=True):
+                    st.markdown(f'<span class="{marker}"></span>', unsafe_allow_html=True)
+                    c1, c2, c3, c4, c5 = st.columns([3, 1, 1, 1, 1])
+                    with c1:
+                        st.write(f"{status_label} | {d['name']} {pw_icon}")
+                    with c2:
+                        if d['is_active']:
+                            if st.button("無効化", key=f"deact_{d['id']}", type="secondary"):
+                                update_doctor(d['id'], is_active=0)
+                                st.rerun()
+                        else:
+                            if st.button("有効化", key=f"act_{d['id']}"):
+                                update_doctor(d['id'], is_active=1)
+                                st.rerun()
+                    with c3:
+                        if st.button("名前変更", key=f"rename_{d['id']}"):
+                            st.session_state[f"editing_doc_{d['id']}"] = True
+                    with c4:
+                        btn_label = "PW再設定" if has_pw else "初期PW設定"
+                        if st.button(btn_label, key=f"setpw_{d['id']}"):
+                            st.session_state[f"setting_pw_{d['id']}"] = True
+                    with c5:
+                        if st.button("削除", key=f"del_doc_{d['id']}", type="secondary"):
+                            st.session_state[f"confirm_del_doc_{d['id']}"] = True
 
                 # 名前変更フォーム
                 if st.session_state.get(f"editing_doc_{d['id']}"):
@@ -145,34 +149,28 @@ def render(target_month, year, month):
         clinics_all = get_clinics(active_only=False)
         if clinics_all:
             for c in clinics_all:
-                cc1, cc2, cc3 = st.columns([4, 1, 1])
-                with cc1:
-                    if c['is_active']:
-                        st.markdown(
-                            f'<span style="background-color:#d4edda;padding:2px 8px;border-radius:4px">'
-                            f'有効</span> **{c["name"]}** '
-                            f'| ¥{c["fee"]:,} | {FREQ_LABELS.get(c["frequency"], c["frequency"])}',
-                            unsafe_allow_html=True,
+                marker = "row-active" if c['is_active'] else "row-inactive"
+                status_label = "有効" if c['is_active'] else "無効"
+                with st.container(border=True):
+                    st.markdown(f'<span class="{marker}"></span>', unsafe_allow_html=True)
+                    cc1, cc2, cc3 = st.columns([4, 1, 1])
+                    with cc1:
+                        st.write(
+                            f"{status_label} | **{c['name']}** "
+                            f"| ¥{c['fee']:,} | {FREQ_LABELS.get(c['frequency'], c['frequency'])}"
                         )
-                    else:
-                        st.markdown(
-                            f'<span style="background-color:#f8d7da;padding:2px 8px;border-radius:4px">'
-                            f'無効</span> **{c["name"]}** '
-                            f'| ¥{c["fee"]:,} | {FREQ_LABELS.get(c["frequency"], c["frequency"])}',
-                            unsafe_allow_html=True,
-                        )
-                with cc2:
-                    if c['is_active']:
-                        if st.button("無効化", key=f"deact_cli_{c['id']}", type="secondary"):
-                            update_clinic(c['id'], is_active=0)
-                            st.rerun()
-                    else:
-                        if st.button("有効化", key=f"act_cli_{c['id']}"):
-                            update_clinic(c['id'], is_active=1)
-                            st.rerun()
-                with cc3:
-                    if st.button("編集", key=f"edit_cli_{c['id']}"):
-                        st.session_state[f"editing_cli_{c['id']}"] = True
+                    with cc2:
+                        if c['is_active']:
+                            if st.button("無効化", key=f"deact_cli_{c['id']}", type="secondary"):
+                                update_clinic(c['id'], is_active=0)
+                                st.rerun()
+                        else:
+                            if st.button("有効化", key=f"act_cli_{c['id']}"):
+                                update_clinic(c['id'], is_active=1)
+                                st.rerun()
+                    with cc3:
+                        if st.button("編集", key=f"edit_cli_{c['id']}"):
+                            st.session_state[f"editing_cli_{c['id']}"] = True
 
                 # 外勤先編集フォーム
                 if st.session_state.get(f"editing_cli_{c['id']}"):
