@@ -1,5 +1,4 @@
 """管理者: マスタ管理タブ"""
-import json
 import streamlit as st
 from database import (
     get_doctors, add_doctor, update_doctor, delete_doctor,
@@ -199,7 +198,7 @@ def render(target_month, year, month):
         )
 
         if selected_clinic:
-            pref_docs = json.loads(selected_clinic.get("preferred_doctors", "[]"))
+            pref_docs = selected_clinic.get("preferred_doctors", [])
 
             st.write("**指名医員（この外勤先が希望する医員）:**")
             new_pref = st.multiselect(
