@@ -4,6 +4,7 @@ Google スプレッドシートで医員・外勤先・希望・スケジュー�
 """
 import json
 import hashlib
+import time
 from datetime import datetime
 import gspread
 import streamlit as st
@@ -23,6 +24,18 @@ def _get_spreadsheet():
     return gc.open(st.secrets.get("spreadsheet_name", "外勤調整データ"))
 
 
+def _retry(func, *args, max_retries=3, **kwargs):
+    """API呼び出しをリトライ付きで実行"""
+    for attempt in range(max_retries):
+        try:
+            return func(*args, **kwargs)
+        except gspread.exceptions.APIError:
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+            else:
+                raise
+
+
 _ws_cache = {}
 
 
@@ -40,9 +53,8 @@ def _get_sheet(name):
 
 
 def _get_all_records(ws):
-    """シートの全レコードを辞書リストで取得"""
-    data = ws.get_all_records()
-    return data
+    """シートの全レコードを辞書リストで取得（リトライ付き）"""
+    return _retry(ws.get_all_records)
 
 
 def _find_row_index(ws, col, value):
@@ -591,17 +603,18 @@ _old_schedules_cleaned = False
 
 
 def delete_old_schedules(months_to_keep=4):
-    """古い月別シートを削除（プロセス中1回のみ）"""
+    """古い月別シートを削除（プロセス中1回のみ、キャッシュ利用）"""
     global _old_schedules_cleaned
     if _old_schedules_cleaned:
         return
+    _old_schedules_cleaned = True
     from dateutil.relativedelta import relativedelta
     cutoff = (datetime.now() - relativedelta(months=months_to_keep)).strftime("%Y-%m")
     sh = _get_spreadsheet()
-    _old_schedules_cleaned = True
-    for ws in sh.worksheets():
+    for name, ws in list(_ws_cache.items()):
         for prefix in ("希望_", "スケジュール_"):
-            if ws.title.startswith(prefix):
-                ym = ws.title.replace(prefix, "")
+            if name.startswith(prefix):
+                ym = name.replace(prefix, "")
                 if ym < cutoff:
                     sh.del_worksheet(ws)
+                    _ws_cache.pop(name, None)
