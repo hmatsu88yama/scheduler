@@ -9,7 +9,8 @@ from dateutil.relativedelta import relativedelta
 from database import (
     init_db, get_doctors, delete_old_schedules,
     is_admin_password_set, set_admin_password, verify_admin_password,
-    is_doctor_password_set, set_doctor_password, verify_doctor_password,
+    is_doctor_individual_password_set, set_doctor_individual_password,
+    verify_doctor_individual_password, update_doctor_email,
 )
 from optimizer import get_target_saturdays
 from pages import (
@@ -92,29 +93,7 @@ def _show_admin_login():
 
 
 def _show_doctor_login():
-    """医員パスワード認証画面"""
-    st.title("医員ログイン")
-    st.markdown("---")
-
-    if not is_doctor_password_set():
-        st.info("医員用パスワードが未設定です。管理者画面で設定してください。")
-    else:
-        pw = st.text_input("パスワード", type="password", key="doc_pw_login")
-        if st.button("ログイン", type="primary"):
-            if verify_doctor_password(pw):
-                st.session_state.doctor_authenticated = True
-                st.rerun()
-            else:
-                st.error("パスワードが正しくありません")
-
-    st.markdown("---")
-    if st.button("← 戻る"):
-        st.session_state.role = None
-        st.rerun()
-
-
-def _show_doctor_selection():
-    """医員選択画面（認証済み後）"""
+    """医員ログイン画面（名前選択 → 個別パスワード入力）"""
     st.title("医員ログイン")
     st.markdown("---")
 
@@ -124,42 +103,102 @@ def _show_doctor_selection():
     else:
         doctor_names = [d["name"] for d in doctors]
         selected = st.selectbox("名前を選択してください", doctor_names)
-        if st.button("選択", type="primary"):
-            doctor = next(d for d in doctors if d["name"] == selected)
-            st.session_state.doctor_id = doctor["id"]
-            st.rerun()
+        doctor = next(d for d in doctors if d["name"] == selected)
+
+        if not is_doctor_individual_password_set(doctor["id"]):
+            st.info("パスワードが未設定です。管理者に初期パスワードの設定を依頼してください。")
+        else:
+            pw = st.text_input("パスワード", type="password", key="doc_pw_login")
+            if st.button("ログイン", type="primary"):
+                if verify_doctor_individual_password(doctor["id"], pw):
+                    st.session_state.doctor_authenticated = True
+                    st.session_state.doctor_id = doctor["id"]
+                    st.rerun()
+                else:
+                    st.error("パスワードが正しくありません")
 
     st.markdown("---")
     if st.button("← 戻る"):
         st.session_state.role = None
-        st.session_state.doctor_authenticated = False
         st.rerun()
 
 
-def _show_header(title):
-    """ヘッダー：タイトル・対象月セレクタ・ログアウト"""
+def _show_header(title, doctor=None):
+    """ヘッダー：タイトル・対象月セレクタ・設定・ログアウト"""
     today = date.today()
     months = [(today + relativedelta(months=i)).strftime("%Y-%m") for i in range(4)]
 
-    col_title, col_month, col_logout = st.columns([3, 2, 1])
+    if doctor:
+        col_title, col_month, col_settings, col_logout = st.columns([3, 2, 1, 1])
+    else:
+        col_title, col_month, col_logout = st.columns([3, 2, 1])
+        col_settings = None
     with col_title:
         st.markdown(f"**{title}**")
     with col_month:
         target_month = st.selectbox(
             "対象月", months, label_visibility="collapsed",
         )
+    if col_settings and doctor:
+        with col_settings:
+            if st.button("⚙ 設定", use_container_width=True):
+                st.session_state.show_doctor_settings = True
     with col_logout:
         if st.button("ログアウト", use_container_width=True):
             st.session_state.role = None
             st.session_state.admin_authenticated = False
             st.session_state.doctor_authenticated = False
             st.session_state.doctor_id = None
+            st.session_state.pop("show_doctor_settings", None)
             st.rerun()
+
+    # 医員設定ダイアログ（パスワード変更・メールアドレス設定）
+    if doctor and st.session_state.get("show_doctor_settings"):
+        _show_doctor_settings(doctor)
 
     year, month = map(int, target_month.split("-"))
     st.caption(f"対象土曜日数: {len(get_target_saturdays(year, month))}日")
     st.markdown("---")
     return target_month, year, month
+
+
+def _show_doctor_settings(doctor):
+    """医員設定: パスワード変更・メールアドレス設定"""
+    with st.expander("アカウント設定", expanded=True):
+        tab_pw, tab_email = st.tabs(["パスワード変更", "メールアドレス設定"])
+
+        with tab_pw:
+            with st.form("change_password_form"):
+                current_pw = st.text_input("現在のパスワード", type="password")
+                new_pw1 = st.text_input("新しいパスワード", type="password")
+                new_pw2 = st.text_input("新しいパスワード（確認）", type="password")
+                if st.form_submit_button("パスワードを変更"):
+                    if not current_pw or not new_pw1:
+                        st.error("すべての項目を入力してください")
+                    elif not verify_doctor_individual_password(doctor["id"], current_pw):
+                        st.error("現在のパスワードが正しくありません")
+                    elif new_pw1 != new_pw2:
+                        st.error("新しいパスワードが一致しません")
+                    else:
+                        set_doctor_individual_password(doctor["id"], new_pw1)
+                        st.success("パスワードを変更しました")
+
+        with tab_email:
+            with st.form("change_email_form"):
+                current_email = doctor.get("email", "")
+                if current_email:
+                    st.write(f"現在のメールアドレス: {current_email}")
+                else:
+                    st.write("メールアドレスが未設定です")
+                new_email = st.text_input("メールアドレス", value=current_email)
+                if st.form_submit_button("メールアドレスを保存"):
+                    update_doctor_email(doctor["id"], new_email.strip())
+                    st.success("メールアドレスを保存しました")
+                    st.rerun()
+
+        if st.button("設定を閉じる"):
+            st.session_state.pop("show_doctor_settings", None)
+            st.rerun()
 
 
 # ---- メインルーティング ----
@@ -189,15 +228,15 @@ elif st.session_state.role == "admin":
 elif st.session_state.role == "doctor":
     if not st.session_state.doctor_authenticated:
         _show_doctor_login()
-    elif st.session_state.doctor_id is None:
-        _show_doctor_selection()
     else:
         doctors = get_doctors()
         doctor = next((d for d in doctors if d["id"] == st.session_state.doctor_id), None)
         if doctor is None:
-            _show_doctor_selection()
+            st.session_state.doctor_authenticated = False
+            st.session_state.doctor_id = None
+            st.rerun()
         else:
-            target_month, year, month = _show_header(doctor['name'])
+            target_month, year, month = _show_header(doctor['name'], doctor=doctor)
 
             tab1, tab2 = st.tabs(["希望入力", "スケジュール確認"])
 

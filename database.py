@@ -62,7 +62,7 @@ def _next_id(ws):
 # ---- 初期化 ----
 
 SHEET_HEADERS = {
-    "医員マスタ": ["id", "name", "is_active", "created_at"],
+    "医員マスタ": ["id", "name", "email", "password_hash", "is_active", "created_at"],
     "外勤先マスタ": ["id", "name", "fee", "frequency", "preferred_doctors", "is_active", "created_at"],
     "優先度マスタ": ["doctor_id", "clinic_id", "weight"],
     "日別設定": ["clinic_id", "date", "required_doctors"],
@@ -71,15 +71,22 @@ SHEET_HEADERS = {
 
 
 def init_db():
-    """全シートを初期化（ヘッダーがなければ作成）"""
+    """全シートを初期化（ヘッダーがなければ作成、不足カラムがあれば追加）"""
     sh = _get_spreadsheet()
     for sheet_name, headers in SHEET_HEADERS.items():
         try:
             ws = sh.worksheet(sheet_name)
         except gspread.WorksheetNotFound:
             ws = sh.add_worksheet(title=sheet_name, rows=100, cols=len(headers))
-        if not ws.row_values(1):
+        existing_headers = ws.row_values(1)
+        if not existing_headers:
             ws.update([headers], "A1")
+        else:
+            # 不足カラムを末尾に追加（既存データとの互換性）
+            missing = [h for h in headers if h not in existing_headers]
+            if missing:
+                new_headers = existing_headers + missing
+                ws.update([new_headers], "A1")
 
 
 def _init_monthly_sheet(name, headers):
@@ -102,6 +109,8 @@ def get_doctors(active_only=True):
     result = []
     for r in records:
         r["id"] = int(r["id"])
+        r["email"] = str(r.get("email", ""))
+        r["password_hash"] = str(r.get("password_hash", ""))
         r["is_active"] = int(r.get("is_active", 1))
         if active_only and not r["is_active"]:
             continue
@@ -118,7 +127,7 @@ def add_doctor(name):
         return
     new_id = _next_id(ws)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    ws.append_row([new_id, name, 1, now])
+    ws.append_row([new_id, name, "", "", 1, now])
 
 
 def update_doctor(doc_id, name=None, is_active=None):
@@ -474,19 +483,56 @@ def verify_admin_password(password: str) -> bool:
     return stored == _hash_password(password)
 
 
-def is_doctor_password_set() -> bool:
-    return _get_setting("doctor_password") is not None
+def is_doctor_individual_password_set(doctor_id) -> bool:
+    """医員の個別パスワードが設定済みか"""
+    ws = _get_sheet("医員マスタ")
+    row_idx = _find_row_index(ws, 1, doctor_id)
+    if not row_idx:
+        return False
+    headers = ws.row_values(1)
+    if "password_hash" not in headers:
+        return False
+    col_idx = headers.index("password_hash") + 1
+    val = ws.cell(row_idx, col_idx).value
+    return bool(val)
 
 
-def set_doctor_password(password: str):
-    _set_setting("doctor_password", _hash_password(password))
+def set_doctor_individual_password(doctor_id, password: str):
+    """医員の個別パスワードを設定"""
+    ws = _get_sheet("医員マスタ")
+    row_idx = _find_row_index(ws, 1, doctor_id)
+    if not row_idx:
+        return
+    headers = ws.row_values(1)
+    col_idx = headers.index("password_hash") + 1
+    ws.update_cell(row_idx, col_idx, _hash_password(password))
 
 
-def verify_doctor_password(password: str) -> bool:
-    stored = _get_setting("doctor_password")
+def verify_doctor_individual_password(doctor_id, password: str) -> bool:
+    """医員の個別パスワードを検証"""
+    ws = _get_sheet("医員マスタ")
+    row_idx = _find_row_index(ws, 1, doctor_id)
+    if not row_idx:
+        return False
+    headers = ws.row_values(1)
+    if "password_hash" not in headers:
+        return False
+    col_idx = headers.index("password_hash") + 1
+    stored = ws.cell(row_idx, col_idx).value
     if not stored:
         return False
     return stored == _hash_password(password)
+
+
+def update_doctor_email(doctor_id, email: str):
+    """医員のメールアドレスを設定/更新"""
+    ws = _get_sheet("医員マスタ")
+    row_idx = _find_row_index(ws, 1, doctor_id)
+    if not row_idx:
+        return
+    headers = ws.row_values(1)
+    col_idx = headers.index("email") + 1
+    ws.update_cell(row_idx, col_idx, email)
 
 
 # ---- Clinic Date Overrides ----

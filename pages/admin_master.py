@@ -6,7 +6,7 @@ from database import (
     get_clinics, add_clinic, update_clinic, delete_clinic,
     get_affinities, set_affinity,
     get_clinic_date_overrides, set_clinic_date_override,
-    is_doctor_password_set, set_doctor_password,
+    is_doctor_individual_password_set, set_doctor_individual_password,
 )
 from optimizer import get_target_saturdays, get_clinic_dates
 
@@ -24,24 +24,6 @@ FREQ_LABELS = {k: v for k, v in FREQ_OPTIONS}
 def render(target_month, year, month):
     st.header("マスタ管理")
 
-    # ---- 医員用パスワード設定 ----
-    with st.expander("医員用パスワード設定"):
-        if is_doctor_password_set():
-            st.write("設定済み")
-        else:
-            st.warning("未設定（医員がログインできません）")
-        pw1 = st.text_input("新しいパスワード", type="password", key="doc_pw1")
-        pw2 = st.text_input("パスワード（確認）", type="password", key="doc_pw2")
-        if st.button("医員用パスワードを設定"):
-            if not pw1:
-                st.error("パスワードを入力してください")
-            elif pw1 != pw2:
-                st.error("パスワードが一致しません")
-            else:
-                set_doctor_password(pw1)
-                st.success("医員用パスワードを設定しました")
-                st.rerun()
-
     col1, col2 = st.columns(2)
 
     # ---- 医員管理 ----
@@ -58,9 +40,11 @@ def render(target_month, year, month):
         doctors_all = get_doctors(active_only=False)
         if doctors_all:
             for d in doctors_all:
-                c1, c2, c3, c4 = st.columns([3, 1, 1, 1])
+                has_pw = is_doctor_individual_password_set(d['id'])
+                pw_icon = "🔑" if has_pw else "⚠️"
+                c1, c2, c3, c4, c5 = st.columns([3, 1, 1, 1, 1])
                 with c1:
-                    st.write(f"{'[有効]' if d['is_active'] else '[無効]'} {d['name']}")
+                    st.write(f"{'[有効]' if d['is_active'] else '[無効]'} {d['name']} {pw_icon}")
                 with c2:
                     if d['is_active']:
                         if st.button("無効化", key=f"deact_{d['id']}", type="secondary"):
@@ -74,6 +58,10 @@ def render(target_month, year, month):
                     if st.button("名前変更", key=f"rename_{d['id']}"):
                         st.session_state[f"editing_doc_{d['id']}"] = True
                 with c4:
+                    btn_label = "PW再設定" if has_pw else "初期PW設定"
+                    if st.button(btn_label, key=f"setpw_{d['id']}"):
+                        st.session_state[f"setting_pw_{d['id']}"] = True
+                with c5:
                     if st.button("削除", key=f"del_doc_{d['id']}", type="secondary"):
                         st.session_state[f"confirm_del_doc_{d['id']}"] = True
 
@@ -92,6 +80,28 @@ def render(target_month, year, month):
                         with fc2:
                             if st.form_submit_button("キャンセル"):
                                 st.session_state.pop(f"editing_doc_{d['id']}", None)
+                                st.rerun()
+
+                # パスワード設定フォーム
+                if st.session_state.get(f"setting_pw_{d['id']}"):
+                    with st.form(f"setpw_form_{d['id']}"):
+                        pw1 = st.text_input("パスワード", type="password", key=f"pw1_{d['id']}")
+                        pw2 = st.text_input("パスワード（確認）", type="password", key=f"pw2_{d['id']}")
+                        fc1, fc2 = st.columns(2)
+                        with fc1:
+                            if st.form_submit_button("設定"):
+                                if not pw1:
+                                    st.error("パスワードを入力してください")
+                                elif pw1 != pw2:
+                                    st.error("パスワードが一致しません")
+                                else:
+                                    set_doctor_individual_password(d['id'], pw1)
+                                    st.success(f"「{d['name']}」のパスワードを設定しました")
+                                    st.session_state.pop(f"setting_pw_{d['id']}", None)
+                                    st.rerun()
+                        with fc2:
+                            if st.form_submit_button("キャンセル"):
+                                st.session_state.pop(f"setting_pw_{d['id']}", None)
                                 st.rerun()
 
                 # 削除確認
